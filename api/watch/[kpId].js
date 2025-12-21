@@ -1,12 +1,55 @@
+// api/watch/[kpId].js
+import axios from "axios";
+
 export default async function handler(req, res) {
+    // CORS (если фронт на другом домене)
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") return res.status(204).end();
+    if (req.method !== "GET")
+        return res.status(405).json({ error: "method_not_allowed" });
+
     const { kpId } = req.query;
 
-    return res.status(200).json({
-        ok: true,
-        kpId,
-        vercelEnv: process.env.VERCEL_ENV,
-        vercelUrl: process.env.VERCEL_URL,
-        hasToken: Boolean(process.env.ALLOHA_TOKEN),
-        tokenLen: process.env.ALLOHA_TOKEN?.length ?? 0,
-    });
+    if (!kpId) return res.status(400).json({ error: "kpId_required" });
+    if (!process.env.ALLOHA_TOKEN) {
+        return res.status(500).json({ error: "no_token" });
+    }
+
+    try {
+        const { data } = await axios.get("https://api.alloha.tv/", {
+            params: {
+                token: process.env.ALLOHA_TOKEN,
+                kp: kpId,
+            },
+            timeout: 15000,
+        });
+
+        if (data?.status !== "success" || !data?.data) {
+            return res.status(404).json({ error: "not_found_in_alloha" });
+        }
+
+        const movie = data.data;
+        const list = Object.values(movie.translation_iframe || {});
+        const dub =
+            list.find((t) => t?.name?.includes("Дублирован")) || list[0];
+        const iframeUrl = dub?.iframe || movie.iframe;
+
+        if (!iframeUrl)
+            return res.status(404).json({ error: "no_iframe_found" });
+
+        return res.json({
+            kpId,
+            title: movie.name,
+            year: movie.year,
+            iframeUrl,
+        });
+    } catch (e) {
+        return res.status(500).json({
+            error: "internal_error",
+            message: String(e?.message || e),
+        });
+    }
 }
