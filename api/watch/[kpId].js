@@ -1,5 +1,8 @@
 // api/watch/[kpId].js
 import axios from "axios";
+import https from "https";
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 export default async function handler(req, res) {
     // CORS (если фронт на другом домене)
@@ -25,6 +28,7 @@ export default async function handler(req, res) {
                 kp: kpId,
             },
             timeout: 15000,
+            httpsAgent,
         });
 
         if (data?.status !== "success" || !data?.data) {
@@ -49,7 +53,11 @@ export default async function handler(req, res) {
     } catch (e) {
         return res.status(500).json({
             error: "internal_error",
-            message: String(e?.message || e),
+            message: e?.message,
+            code: e?.code,
+            url: e?.config?.url,
+            method: e?.config?.method,
+            host: e?.request?.host,
         });
     }
 }
